@@ -79,10 +79,21 @@ server <- function(input, output, session) {
     }
   )
   
+  makeText <- reactive(
+    if(input$week_type == "Calendar week") {
+      paste0("For the week starting Monday ", max(week_starts$Date), " cumulative mileage is ", filter(cumulative_week_miles, Week == max(cumulative_week_miles$Week))$Miles)
+    } else if(input$week_type == "7 days ago") {
+      paste0("For the past 7 days counting from", today, " cumulative mileage is ", filter(running_cumulative_week_miles, Week == max(running_cumulative_week_miles$Week))$Miles)
+      
+    }
+  )
+  
   
   
   
   output$mileagePlot <- renderPlot(makePlot())
+  
+  output$mileageText <- renderText(makeText())
   
 }
 
