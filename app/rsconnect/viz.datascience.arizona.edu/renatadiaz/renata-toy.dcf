@@ -1,0 +1,12 @@
+name: renata-toy
+title: renata-toy
+username: renatadiaz
+account: renatadiaz
+server: viz.datascience.arizona.edu
+hostUrl: https://viz.datascience.arizona.edu/__api__
+appId: 834
+bundleId: 3297
+url: https://viz.datascience.arizona.edu:443/content/68cad351-6f65-4b20-bbe4-d4282e267fc3/
+version: 1
+asMultiple: FALSE
+asStatic: FALSE
