@@ -2,61 +2,32 @@ library(shiny)
 library(dplyr)
 library(lubridate)
 library(ggplot2)
+library(tidyr)
+library(roll)
+theme_set(theme_bw())
 
 
 runs_dat <- read.csv('runs.csv')
 #runs_dat <- read.csv(here::here('app', 'runs.csv'))
 
-runs_dates <- runs_dat %>%
-  mutate(Date = as.Date(Date, format = "%m/%d/%Y"),
-         Weekday = weekdays(Date))
+runs_dat <- runs_dat %>%
+  mutate(Date = as.Date(Date, format = "%m/%d/%y"))
 
-run_days <- unique(select(runs_dates, Date, Weekday))
+last_date <-  Sys.Date() %>% as.Date(format = "%m/%d/%Y")
 
-week_starts <-
-  data.frame(Date = seq(min(run_days$Date) - 6, max(run_days$Date), by = "days")) %>%
-  mutate(Weekday = weekdays(Date)) %>%
-  filter(Weekday == "Monday") %>%
-  mutate(Week = row_number())
-week_ends <-
-  data.frame(Date = seq(min(run_days$Date), max(run_days$Date) + 6, by = "days")) %>%
-  mutate(Weekday = weekdays(Date)) %>%
-  filter(Weekday == "Sunday") %>%
-  mutate(Week = row_number())
-week_numbers <- data.frame(
-  Week = week_starts$Week,
-  Week_start = week_starts$Date,
-  Week_end  = week_ends$Date
-)
-
-run_week_numbers <-
-  left_join(runs_dates, week_numbers, by = join_by(between(Date, Week_start, Week_end)))
-
-cumulative_week_miles <- run_week_numbers %>%
-  group_by(Week) %>%
-  summarize(Miles = sum(Distance)) %>%
-  mutate(conservative = 11.1 * (1.1 ^ (Week - 2)))
-
-
-today <- as.Date(Sys.Date())
-
-days_since_today <- data.frame(Date = seq(min(runs_dates$Date), today, by = "days")) %>%
-  mutate(Week = ceiling(as.numeric(Date - today) / 7) + ceiling(nrow(.) / 7))
-
-running_week_starts <- days_since_today %>%
-  group_by(Week) %>%
-  summarize(Week_start = min(Date),
-            Week_end = max(Date)) %>%
-  ungroup()
-
-running_week_numbers <-
-  left_join(runs_dates, running_week_starts, by = join_by(between(Date, Week_start, Week_end)))
-
-running_cumulative_week_miles <- running_week_numbers %>%
-  group_by(Week) %>%
-  summarize(Miles = sum(Distance)) %>%
-  mutate(conservative = 11.1 * (1.1 ^ (Week - 2)))
-
+runs_dates <- data.frame(Date = seq(min(runs_dat$Date), last_date, by = "day")) %>%
+  mutate(
+    Date = as.Date(Date, format = "%m/%d/%Y"),
+    Weekday = weekdays(Date),
+    WeekNumber = isoweek(Date)
+  ) %>%
+  left_join(runs_dat) %>%
+  mutate(Distance = replace_na(Distance, 0)) %>%
+  mutate(LimitCalendar = 11 * (1.1 ^ (WeekNumber - 33))) %>%
+  group_by(WeekNumber) %>%
+  mutate(CalendarCumulative = cumsum(Distance)) %>%
+  ungroup() %>%
+  mutate(RollingCumulative = roll_sum(Distance, width = 7, min_obs = 1))
 
 
 
@@ -78,56 +49,36 @@ ui <- fluidPage(titlePanel("Cumulative weekly distance"),
 
 server <- function(input, output, session) {
   makePlot <- reactive(if (input$week_type == "Calendar week") {
-    ggplot(cumulative_week_miles,
-           aes(Week, Miles)) +
-      geom_line() +
-      geom_point() +
-      geom_line(aes(y = conservative), color = "red")
+
+    ggplot(runs_dates, aes(Date, CalendarCumulative)) + 
+      geom_col(fill = "blue") + 
+       geom_col(aes(y = Distance), alpha = .5, fill = "lightblue") +
+      geom_line(aes(y = LimitCalendar), color = "red")
   } else if (input$week_type == "7 days ago") {
-    ggplot(running_cumulative_week_miles, aes(Week, Miles)) +
-      geom_line() +
-      geom_point() +
-      
-      geom_line(aes(y = conservative), color = "red")
-    
+    ggplot(runs_dates, aes(Date, RollingCumulative)) + 
+      geom_col(fill = "blue") + 
+      geom_col(aes(y = Distance), alpha = .5, fill = "lightblue") +
+      geom_line(aes(y = LimitCalendar), color = "red")
+
   })
   
   makeText <- reactive(if (input$week_type == "Calendar week") {
+
+    final_week <- filter(runs_dates, WeekNumber == max(runs_dates$WeekNumber))
+    
     paste0(
       "For the week starting Monday ",
-      max(week_starts$Date),
+      min(final_week$Date),
       " cumulative mileage is ",
-      filter(
-        cumulative_week_miles,
-        Week == max(cumulative_week_miles$Week)
-      )$Miles,
-      ". The difference between this an a recommended max is ",
-      filter(
-        cumulative_week_miles,
-        Week == max(cumulative_week_miles$Week)
-      )$conservative - filter(
-        cumulative_week_miles,
-        Week == max(cumulative_week_miles$Week)
-      )$Miles,
+      sum(final_week$Distance),
       "."
     )
   } else if (input$week_type == "7 days ago") {
     paste0(
-      "For the past 7 days counting from",
-      today,
+      "For the past 7 days counting backwards from ",
+      runs_dates$Date[nrow(runs_dates)],
       " cumulative mileage is ",
-      filter(
-        running_cumulative_week_miles,
-        Week == max(running_cumulative_week_miles$Week)
-      )$Miles,
-      ". The difference between this an a recommended max is ",
-      filter(
-        running_cumulative_week_miles,
-        Week == max(running_cumulative_week_miles$Week)
-      )$conservative - filter(
-        running_cumulative_week_miles,
-        Week == max(running_cumulative_week_miles$Week)
-      )$Miles,
+      runs_dates$RollingCumulative[nrow(runs_dates)],
       "."
     )
     
