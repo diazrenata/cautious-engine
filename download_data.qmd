@@ -1,0 +1,48 @@
+---
+title: "Data download + pinning"
+format: html
+editor: source
+---
+
+```{r}
+
+library(dplyr)
+library(lubridate)
+library(tidyr)
+library(roll)
+
+runs_dat <- read.csv('https://raw.githubusercontent.com/diazrenata/cautious-engine/data-branch/data_branch/runs.csv')
+#runs_dat <- read.csv(here::here('app', 'runs.csv'))
+
+runs_dat <- runs_dat %>%
+  mutate(Date = as.Date(Date, format = "%m/%d/%y"))
+
+last_date <-  Sys.Date() %>% as.Date(format = "%m/%d/%Y")
+
+runs_dates <- data.frame(Date = seq(min(runs_dat$Date), last_date, by = "day")) %>%
+  mutate(
+    Date = as.Date(Date, format = "%m/%d/%Y"),
+    Weekday = weekdays(Date),
+    WeekNumber = isoweek(Date)
+  ) %>%
+  left_join(runs_dat) %>%
+  mutate(Distance = replace_na(Distance, 0)) %>%
+  mutate(LimitCalendar = 11 * (1.1 ^ (WeekNumber - 33))) %>%
+  group_by(WeekNumber) %>%
+  mutate(CalendarCumulative = cumsum(Distance)) %>%
+  ungroup() %>%
+  mutate(RollingCumulative = roll_sum(Distance, width = 7, min_obs = 1))
+
+
+runs_dates
+
+```
+
+```{r}
+library(pins)
+toyboard <- board_connect()
+
+toyboard %>%
+  pin_write(runs_dates, "runs_dates")
+
+```
