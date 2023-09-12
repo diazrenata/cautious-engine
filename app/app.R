@@ -3,33 +3,13 @@ library(dplyr)
 library(lubridate)
 library(ggplot2)
 library(tidyr)
-library(roll)
+library(pins)
+
+toyboard <- board_connect()
+
+runs_dates <- pin_read(toyboard, name = "renatadiaz/runs_dates")
+
 theme_set(theme_bw())
-
-
-runs_dat <- read.csv('runs.csv')
-#runs_dat <- read.csv(here::here('app', 'runs.csv'))
-
-runs_dat <- runs_dat %>%
-  mutate(Date = as.Date(Date, format = "%m/%d/%y"))
-
-last_date <-  Sys.Date() %>% as.Date(format = "%m/%d/%Y")
-
-runs_dates <- data.frame(Date = seq(min(runs_dat$Date), last_date, by = "day")) %>%
-  mutate(
-    Date = as.Date(Date, format = "%m/%d/%Y"),
-    Weekday = weekdays(Date),
-    WeekNumber = isoweek(Date)
-  ) %>%
-  left_join(runs_dat) %>%
-  mutate(Distance = replace_na(Distance, 0)) %>%
-  mutate(LimitCalendar = 11 * (1.1 ^ (WeekNumber - 33))) %>%
-  group_by(WeekNumber) %>%
-  mutate(CalendarCumulative = cumsum(Distance)) %>%
-  ungroup() %>%
-  mutate(RollingCumulative = roll_sum(Distance, width = 7, min_obs = 1))
-
-
 
 ui <- fluidPage(titlePanel("Cumulative weekly distance"),
                 sidebarLayout(
